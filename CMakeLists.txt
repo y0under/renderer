@@ -6,20 +6,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(glfw3 CONFIG REQUIRED)
+find_package(Vulkan REQUIRED)
 
 add_executable(app
-  src/main.cc
-)
+  src/main.cc)
 
 target_link_libraries(app PRIVATE
   glfw
-)
+  Vulkan::Vulkan)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
   target_compile_options(app PRIVATE
     -Wall
     -Wextra
     -Wpedantic
-    -pedantic-errors
-  )
+    -pedantic-errors)
 endif()
