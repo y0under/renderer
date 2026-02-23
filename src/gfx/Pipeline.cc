@@ -15,19 +15,13 @@ namespace gfx {
 
 namespace {
 
-[[noreturn]] void fail(char const* msg) {
-  throw std::runtime_error(msg);
-}
-
-[[noreturn]] void fail(std::string const& msg) {
-  throw std::runtime_error(msg);
-}
+[[noreturn]] void fail(char const* msg) { throw std::runtime_error(msg); }
+[[noreturn]] void fail(std::string const& msg) { throw std::runtime_error(msg); }
 
 void vk_check(VkResult r, char const* what) {
-  if (r == VK_SUCCESS) {
-    return;
+  if (r != VK_SUCCESS) {
+    fail(std::string("Vulkan error: ") + what + " (" + std::to_string(static_cast<int>(r)) + ")");
   }
-  fail(std::string("Vulkan error: ") + what + " (" + std::to_string(static_cast<int>(r)) + ")");
 }
 
 std::vector<std::uint32_t> read_spirv(std::string const& path) {
@@ -138,34 +132,19 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   ia.primitiveRestartEnable = VK_FALSE;
 
-  VkViewport viewport{};
-  viewport.x = 0.0f;
-  viewport.y = 0.0f;
-  viewport.width = static_cast<float>(sc.extent().width);
-  viewport.height = static_cast<float>(sc.extent().height);
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-
-  VkRect2D scissor{};
-  scissor.offset = {0, 0};
-  scissor.extent = sc.extent();
-
+  // dynamic viewport/scissor
   VkPipelineViewportStateCreateInfo vp{};
   vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   vp.viewportCount = 1;
-  vp.pViewports = &viewport;
   vp.scissorCount = 1;
-  vp.pScissors = &scissor;
 
   VkPipelineRasterizationStateCreateInfo rs{};
   rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   rs.depthClampEnable = VK_FALSE;
   rs.rasterizerDiscardEnable = VK_FALSE;
   rs.polygonMode = VK_POLYGON_MODE_FILL;
-
   rs.cullMode = VK_CULL_MODE_BACK_BIT;
-  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-
+  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // Y反転後のwindingに合わせる
   rs.depthBiasEnable = VK_FALSE;
   rs.lineWidth = 1.0f;
 
@@ -186,7 +165,13 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   cb.attachmentCount = 1;
   cb.pAttachments = &cb_att;
 
-  // push constant: float invAspect
+  VkDynamicState dynamics[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
+  VkPipelineDynamicStateCreateInfo ds{};
+  ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  ds.dynamicStateCount = static_cast<uint32_t>(sizeof(dynamics) / sizeof(dynamics[0]));
+  ds.pDynamicStates = dynamics;
+
   VkPushConstantRange pcr{};
   pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   pcr.offset = 0;
@@ -209,6 +194,7 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   gpci.pRasterizationState = &rs;
   gpci.pMultisampleState = &ms;
   gpci.pColorBlendState = &cb;
+  gpci.pDynamicState = &ds;
   gpci.layout = pipeline_layout_;
   gpci.renderPass = render_pass_;
   gpci.subpass = 0;

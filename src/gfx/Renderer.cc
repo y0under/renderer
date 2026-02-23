@@ -202,6 +202,20 @@ void Renderer::record_command_buffer(VkCommandBuffer cb, Swapchain const& sc, Pi
   vkCmdBeginRenderPass(cb, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl.pipeline());
 
+  VkViewport viewport{};
+  viewport.x = 0.0f;
+  viewport.y = 0.0f;
+  viewport.width = static_cast<float>(sc.extent().width);
+  viewport.height = static_cast<float>(sc.extent().height);
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  vkCmdSetViewport(cb, 0, 1, &viewport);
+
+  VkRect2D scissor{};
+  scissor.offset = {0, 0};
+  scissor.extent = sc.extent();
+  vkCmdSetScissor(cb, 0, 1, &scissor);
+
   // push constant: invAspect = height/width
   float const aspect = (sc.extent().height != 0U) ?
                        (static_cast<float>(sc.extent().width) / static_cast<float>(sc.extent().height)) : 1.0f;
