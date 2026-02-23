@@ -10,7 +10,8 @@ find_package(Vulkan REQUIRED)
 
 add_executable(app
   src/main.cc
-  src/gfx/Context.cc)
+  src/gfx/Context.cc
+  src/gfx/Swapchain.cc)
 
 target_include_directories(app PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
