@@ -9,7 +9,11 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
 add_executable(app
-  src/main.cc)
+  src/main.cc
+  src/gfx/Context.cc)
+
+target_include_directories(app PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(app PRIVATE
   glfw
