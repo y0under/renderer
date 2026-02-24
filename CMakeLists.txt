@@ -6,14 +6,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(glfw3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
 add_executable(app
-  src/main.cc
+  src/gfx/Buffer.cc
   src/gfx/Context.cc
+  src/gfx/Mesh.cc
   src/gfx/Pipeline.cc
   src/gfx/Renderer.cc
-  src/gfx/Swapchain.cc)
+  src/gfx/Swapchain.cc
+  src/main.cc
+  src/math/Camera.cc)
 
 target_include_directories(app PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)

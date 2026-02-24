@@ -4,9 +4,13 @@
 #include <cstdlib>
 
 #include "gfx/Context.h"
+#include "gfx/Mesh.h"
 #include "gfx/Pipeline.h"
 #include "gfx/Renderer.h"
 #include "gfx/Swapchain.h"
+#include "math/Camera.h"
+
+#include <glm/glm.hpp>
 
 namespace {
 
@@ -60,6 +64,8 @@ int main() {
   gfx::Swapchain sc{};
   gfx::Pipeline pl{};
   gfx::Renderer rd{};
+  gfx::Mesh mesh{};
+  math::Camera cam{};
 
   try {
     gfx::ContextCreateInfo ci{};
@@ -72,8 +78,14 @@ int main() {
     pl.init(ctx, sc, shader_vert_path(), shader_frag_path());
 
     rd.init(ctx, sc, pl);
+
+    mesh.init_triangle(ctx);
+
+    cam.set_perspective(60.0f * 3.1415926535f / 180.0f, 0.1f, 100.0f);
+    cam.set_look_at(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
   } catch (std::exception const& e) {
     std::fprintf(stderr, "Init failed: %s\n", e.what());
+    mesh.shutdown(ctx);
     rd.shutdown(ctx);
     pl.shutdown(ctx);
     sc.shutdown(ctx);
@@ -85,9 +97,10 @@ int main() {
 
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     glfwPollEvents();
-    (void)rd.draw_frame(ctx, window, sc, pl);
+    (void)rd.draw_frame(ctx, window, sc, pl, mesh, cam);
   }
 
+  mesh.shutdown(ctx);
   rd.shutdown(ctx);
   pl.shutdown(ctx);
   sc.shutdown(ctx);

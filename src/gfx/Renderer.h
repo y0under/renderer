@@ -7,11 +7,14 @@
 
 struct GLFWwindow;
 
+namespace math { class Camera; }
+
 namespace gfx {
 
 class Context;
 class Swapchain;
 class Pipeline;
+class Mesh;
 
 class Renderer {
 public:
@@ -27,19 +30,33 @@ public:
   void init(Context const& ctx, Swapchain const& sc, Pipeline const& pl);
   void shutdown(Context const& ctx);
 
-  // returns false when swapchain was recreated (caller may want to react)
-  bool draw_frame(Context const& ctx, GLFWwindow* window, Swapchain& sc, Pipeline& pl);
+  bool draw_frame(Context const& ctx,
+                  GLFWwindow* window,
+                  Swapchain& sc,
+                  Pipeline const& pl,
+                  Mesh const& mesh,
+                  math::Camera const& cam);
 
 private:
   void create_command_pool(Context const& ctx);
+
   void allocate_command_buffers(Context const& ctx, std::size_t count);
+  void free_command_buffers(Context const& ctx);
+
   void create_sync(Context const& ctx);
   void destroy_sync(Context const& ctx);
 
   void create_framebuffers(Context const& ctx, Swapchain const& sc, Pipeline const& pl);
   void destroy_framebuffers(Context const& ctx);
 
-  void record_command_buffer(VkCommandBuffer cb, Swapchain const& sc, Pipeline const& pl, VkFramebuffer fb);
+  void record_command_buffer(VkCommandBuffer cb,
+                            Swapchain const& sc,
+                            Pipeline const& pl,
+                            VkFramebuffer fb,
+                            Mesh const& mesh,
+                            math::Camera const& cam);
+
+  void recreate_swapchain_dependent(Context const& ctx, GLFWwindow* window, Swapchain& sc, Pipeline const& pl);
 
 private:
   static constexpr std::uint32_t kMaxFramesInFlight = 2;

@@ -1,6 +1,7 @@
 #include "gfx/Pipeline.h"
 
 #include "gfx/Context.h"
+#include "gfx/Mesh.h"
 #include "gfx/Swapchain.h"
 
 #include <cstddef>
@@ -124,15 +125,22 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   stages[1].module = frag;
   stages[1].pName = "main";
 
+  VkVertexInputBindingDescription binding = Vertex::binding_description();
+  VkVertexInputAttributeDescription attrs[2]{};
+  Vertex::attribute_descriptions(attrs);
+
   VkPipelineVertexInputStateCreateInfo vi{};
   vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vi.vertexBindingDescriptionCount = 1;
+  vi.pVertexBindingDescriptions = &binding;
+  vi.vertexAttributeDescriptionCount = 2;
+  vi.pVertexAttributeDescriptions = attrs;
 
   VkPipelineInputAssemblyStateCreateInfo ia{};
   ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   ia.primitiveRestartEnable = VK_FALSE;
 
-  // dynamic viewport/scissor
   VkPipelineViewportStateCreateInfo vp{};
   vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   vp.viewportCount = 1;
@@ -144,7 +152,7 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   rs.rasterizerDiscardEnable = VK_FALSE;
   rs.polygonMode = VK_POLYGON_MODE_FILL;
   rs.cullMode = VK_CULL_MODE_BACK_BIT;
-  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // Y反転後のwindingに合わせる
+  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rs.depthBiasEnable = VK_FALSE;
   rs.lineWidth = 1.0f;
 
@@ -172,10 +180,11 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   ds.dynamicStateCount = static_cast<uint32_t>(sizeof(dynamics) / sizeof(dynamics[0]));
   ds.pDynamicStates = dynamics;
 
+  // push constant: mat4 mvp (16 floats = 64 bytes)
   VkPushConstantRange pcr{};
   pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   pcr.offset = 0;
-  pcr.size = static_cast<uint32_t>(sizeof(float));
+  pcr.size = 16u * static_cast<uint32_t>(sizeof(float));
 
   VkPipelineLayoutCreateInfo plci{};
   plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
