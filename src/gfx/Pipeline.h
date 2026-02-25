@@ -21,7 +21,12 @@ public:
   Pipeline& operator=(Pipeline&& other) noexcept;
 
   // vert/frag are SPIR-V paths.
-  void init(Context const& ctx, Swapchain const& sc, std::string const& vert_spv_path, std::string const& frag_spv_path);
+  void init(Context const& ctx,
+            Swapchain const& sc,
+            VkFormat depth_format,
+            std::string const& vert_spv_path,
+            std::string const& frag_spv_path);
+
   void shutdown(Context const& ctx);
 
   VkRenderPass render_pass() const { return render_pass_; }

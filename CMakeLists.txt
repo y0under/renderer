@@ -12,6 +12,8 @@ find_package(Vulkan REQUIRED)
 add_executable(app
   src/gfx/Buffer.cc
   src/gfx/Context.cc
+  src/gfx/Depth.cc
+  src/gfx/Image.cc
   src/gfx/Mesh.cc
   src/gfx/Pipeline.cc
   src/gfx/Renderer.cc

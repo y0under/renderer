@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include "gfx/Context.h"
+#include "gfx/Depth.h"
 #include "gfx/Mesh.h"
 #include "gfx/Pipeline.h"
 #include "gfx/Renderer.h"
@@ -62,6 +63,7 @@ int main() {
 
   gfx::Context ctx{};
   gfx::Swapchain sc{};
+  gfx::Depth depth{};
   gfx::Pipeline pl{};
   gfx::Renderer rd{};
   gfx::Mesh mesh{};
@@ -75,9 +77,11 @@ int main() {
 
     sc.init(ctx, window);
 
-    pl.init(ctx, sc, shader_vert_path(), shader_frag_path());
+    depth.init(ctx, sc);
 
-    rd.init(ctx, sc, pl);
+    pl.init(ctx, sc, depth.format(), shader_vert_path(), shader_frag_path());
+
+    rd.init(ctx, sc, pl, depth);
 
     mesh.init_triangle(ctx);
 
@@ -88,6 +92,7 @@ int main() {
     mesh.shutdown(ctx);
     rd.shutdown(ctx);
     pl.shutdown(ctx);
+    depth.shutdown(ctx);
     sc.shutdown(ctx);
     ctx.shutdown();
     glfwDestroyWindow(window);
@@ -97,12 +102,13 @@ int main() {
 
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     glfwPollEvents();
-    (void)rd.draw_frame(ctx, window, sc, pl, mesh, cam);
+    (void)rd.draw_frame(ctx, window, sc, pl, mesh, cam, depth);
   }
 
   mesh.shutdown(ctx);
   rd.shutdown(ctx);
   pl.shutdown(ctx);
+  depth.shutdown(ctx);
   sc.shutdown(ctx);
   ctx.shutdown();
 

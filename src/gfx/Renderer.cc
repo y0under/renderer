@@ -1,6 +1,7 @@
 #include "gfx/Renderer.h"
 
 #include "gfx/Context.h"
+#include "gfx/Depth.h"
 #include "gfx/Mesh.h"
 #include "gfx/Pipeline.h"
 #include "gfx/Swapchain.h"
@@ -62,10 +63,10 @@ Renderer& Renderer::operator=(Renderer&& other) noexcept {
   return *this;
 }
 
-void Renderer::init(Context const& ctx, Swapchain const& sc, Pipeline const& pl) {
+void Renderer::init(Context const& ctx, Swapchain const& sc, Pipeline const& pl, Depth const& depth) {
   create_command_pool(ctx);
   allocate_command_buffers(ctx, sc.images().size());
-  create_framebuffers(ctx, sc, pl);
+  create_framebuffers(ctx, sc, pl, depth);
   create_sync(ctx);
 }
 
@@ -162,16 +163,16 @@ void Renderer::destroy_sync(Context const& ctx) {
   image_available_.clear();
 }
 
-void Renderer::create_framebuffers(Context const& ctx, Swapchain const& sc, Pipeline const& pl) {
+void Renderer::create_framebuffers(Context const& ctx, Swapchain const& sc, Pipeline const& pl, Depth const& depth) {
   framebuffers_.assign(sc.image_views().size(), VK_NULL_HANDLE);
 
   for (std::size_t i = 0; i < sc.image_views().size(); ++i) {
-    VkImageView attachments[] = {sc.image_views()[i]};
+    VkImageView attachments[] = {sc.image_views()[i], depth.view()};
 
     VkFramebufferCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     ci.renderPass = pl.render_pass();
-    ci.attachmentCount = 1;
+    ci.attachmentCount = 2;
     ci.pAttachments = attachments;
     ci.width = sc.extent().width;
     ci.height = sc.extent().height;
@@ -201,11 +202,13 @@ void Renderer::record_command_buffer(VkCommandBuffer cb,
   bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   vk_check(vkBeginCommandBuffer(cb, &bi), "vkBeginCommandBuffer");
 
-  VkClearValue clear{};
-  clear.color.float32[0] = 0.05f;
-  clear.color.float32[1] = 0.05f;
-  clear.color.float32[2] = 0.10f;
-  clear.color.float32[3] = 1.0f;
+  VkClearValue clears[2]{};
+  clears[0].color.float32[0] = 0.05f;
+  clears[0].color.float32[1] = 0.05f;
+  clears[0].color.float32[2] = 0.10f;
+  clears[0].color.float32[3] = 1.0f;
+  clears[1].depthStencil.depth = 1.0f;
+  clears[1].depthStencil.stencil = 0;
 
   VkRenderPassBeginInfo rpbi{};
   rpbi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -213,8 +216,8 @@ void Renderer::record_command_buffer(VkCommandBuffer cb,
   rpbi.framebuffer = fb;
   rpbi.renderArea.offset = {0, 0};
   rpbi.renderArea.extent = sc.extent();
-  rpbi.clearValueCount = 1;
-  rpbi.pClearValues = &clear;
+  rpbi.clearValueCount = 2;
+  rpbi.pClearValues = clears;
 
   vkCmdBeginRenderPass(cb, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl.pipeline());
@@ -253,10 +256,18 @@ void Renderer::record_command_buffer(VkCommandBuffer cb,
   vk_check(vkEndCommandBuffer(cb), "vkEndCommandBuffer");
 }
 
-void Renderer::recreate_swapchain_dependent(Context const& ctx, GLFWwindow* window, Swapchain& sc, Pipeline const& pl) {
+void Renderer::recreate_swapchain_dependent(Context const& ctx,
+                                            GLFWwindow* window,
+                                            Swapchain& sc,
+                                            Pipeline const& pl,
+                                            Depth& depth) {
   vk_check(vkDeviceWaitIdle(ctx.device()), "vkDeviceWaitIdle");
 
   sc.recreate(ctx, window);
+
+  // depth depends on extent -> recreate it
+  depth.shutdown(ctx);
+  depth.init(ctx, sc);
 
   destroy_framebuffers(ctx);
 
@@ -266,7 +277,7 @@ void Renderer::recreate_swapchain_dependent(Context const& ctx, GLFWwindow* wind
     allocate_command_buffers(ctx, image_count);
   }
 
-  create_framebuffers(ctx, sc, pl);
+  create_framebuffers(ctx, sc, pl, depth);
 }
 
 bool Renderer::draw_frame(Context const& ctx,
@@ -274,7 +285,8 @@ bool Renderer::draw_frame(Context const& ctx,
                           Swapchain& sc,
                           Pipeline const& pl,
                           Mesh const& mesh,
-                          math::Camera const& cam) {
+                          math::Camera const& cam,
+                          Depth& depth) {
   if (window == nullptr) {
     fail("Renderer::draw_frame: window == nullptr");
   }
@@ -294,7 +306,7 @@ bool Renderer::draw_frame(Context const& ctx,
   );
 
   if (acq == VK_ERROR_OUT_OF_DATE_KHR) {
-    recreate_swapchain_dependent(ctx, window, sc, pl);
+    recreate_swapchain_dependent(ctx, window, sc, pl, depth);
     return false;
   }
 
@@ -331,7 +343,7 @@ bool Renderer::draw_frame(Context const& ctx,
 
   VkResult pres = vkQueuePresentKHR(ctx.present_queue(), &pi);
   if (pres == VK_ERROR_OUT_OF_DATE_KHR || pres == VK_SUBOPTIMAL_KHR || acq == VK_SUBOPTIMAL_KHR) {
-    recreate_swapchain_dependent(ctx, window, sc, pl);
+    recreate_swapchain_dependent(ctx, window, sc, pl, depth);
     frame_index_ = (frame_index_ + 1U) % kMaxFramesInFlight;
     return false;
   }

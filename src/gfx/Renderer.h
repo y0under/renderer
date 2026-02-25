@@ -15,6 +15,7 @@ class Context;
 class Swapchain;
 class Pipeline;
 class Mesh;
+class Depth;
 
 class Renderer {
 public:
@@ -27,7 +28,7 @@ public:
   Renderer(Renderer&& other) noexcept;
   Renderer& operator=(Renderer&& other) noexcept;
 
-  void init(Context const& ctx, Swapchain const& sc, Pipeline const& pl);
+  void init(Context const& ctx, Swapchain const& sc, Pipeline const& pl, Depth const& depth);
   void shutdown(Context const& ctx);
 
   bool draw_frame(Context const& ctx,
@@ -35,7 +36,8 @@ public:
                   Swapchain& sc,
                   Pipeline const& pl,
                   Mesh const& mesh,
-                  math::Camera const& cam);
+                  math::Camera const& cam,
+                  Depth& depth);
 
 private:
   void create_command_pool(Context const& ctx);
@@ -46,7 +48,7 @@ private:
   void create_sync(Context const& ctx);
   void destroy_sync(Context const& ctx);
 
-  void create_framebuffers(Context const& ctx, Swapchain const& sc, Pipeline const& pl);
+  void create_framebuffers(Context const& ctx, Swapchain const& sc, Pipeline const& pl, Depth const& depth);
   void destroy_framebuffers(Context const& ctx);
 
   void record_command_buffer(VkCommandBuffer cb,
@@ -56,7 +58,11 @@ private:
                             Mesh const& mesh,
                             math::Camera const& cam);
 
-  void recreate_swapchain_dependent(Context const& ctx, GLFWwindow* window, Swapchain& sc, Pipeline const& pl);
+  void recreate_swapchain_dependent(Context const& ctx,
+                                    GLFWwindow* window,
+                                    Swapchain& sc,
+                                    Pipeline const& pl,
+                                    Depth& depth);
 
 private:
   static constexpr std::uint32_t kMaxFramesInFlight = 2;

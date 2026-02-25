@@ -72,38 +72,64 @@ Pipeline& Pipeline::operator=(Pipeline&& other) noexcept {
   return *this;
 }
 
-void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& vert_spv_path, std::string const& frag_spv_path) {
-  VkAttachmentDescription color{};
-  color.format = sc.image_format();
-  color.samples = VK_SAMPLE_COUNT_1_BIT;
-  color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  color.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+void Pipeline::init(Context const& ctx,
+                    Swapchain const& sc,
+                    VkFormat depth_format,
+                    std::string const& vert_spv_path,
+                    std::string const& frag_spv_path) {
+  // ---- Render pass (color + depth) ----
+  VkAttachmentDescription attachments[2]{};
+
+  attachments[0].format = sc.image_format();
+  attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  attachments[1].format = depth_format;
+  attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
   VkAttachmentReference color_ref{};
   color_ref.attachment = 0;
   color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+  VkAttachmentReference depth_ref{};
+  depth_ref.attachment = 1;
+  depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
   VkSubpassDescription subpass{};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount = 1;
   subpass.pColorAttachments = &color_ref;
+  subpass.pDepthStencilAttachment = &depth_ref;
 
   VkSubpassDependency dep{};
   dep.srcSubpass = VK_SUBPASS_EXTERNAL;
   dep.dstSubpass = 0;
-  dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dep.srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  dep.dstStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
   dep.srcAccessMask = 0;
-  dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dep.dstAccessMask =
+      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
   VkRenderPassCreateInfo rpci{};
   rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  rpci.attachmentCount = 1;
-  rpci.pAttachments = &color;
+  rpci.attachmentCount = 2;
+  rpci.pAttachments = attachments;
   rpci.subpassCount = 1;
   rpci.pSubpasses = &subpass;
   rpci.dependencyCount = 1;
@@ -111,6 +137,7 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
 
   vk_check(vkCreateRenderPass(ctx.device(), &rpci, nullptr, &render_pass_), "vkCreateRenderPass");
 
+  // ---- Shader modules ----
   VkShaderModule vert = create_shader_module(ctx, vert_spv_path);
   VkShaderModule frag = create_shader_module(ctx, frag_spv_path);
 
@@ -125,6 +152,7 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   stages[1].module = frag;
   stages[1].pName = "main";
 
+  // ---- Vertex input ----
   VkVertexInputBindingDescription binding = Vertex::binding_description();
   VkVertexInputAttributeDescription attrs[2]{};
   Vertex::attribute_descriptions(attrs);
@@ -141,6 +169,7 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   ia.primitiveRestartEnable = VK_FALSE;
 
+  // ---- Dynamic viewport/scissor ----
   VkPipelineViewportStateCreateInfo vp{};
   vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   vp.viewportCount = 1;
@@ -159,6 +188,14 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   VkPipelineMultisampleStateCreateInfo ms{};
   ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
   ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+  VkPipelineDepthStencilStateCreateInfo ds_depth{};
+  ds_depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  ds_depth.depthTestEnable = VK_TRUE;
+  ds_depth.depthWriteEnable = VK_TRUE;
+  ds_depth.depthCompareOp = VK_COMPARE_OP_LESS;
+  ds_depth.depthBoundsTestEnable = VK_FALSE;
+  ds_depth.stencilTestEnable = VK_FALSE;
 
   VkPipelineColorBlendAttachmentState cb_att{};
   cb_att.colorWriteMask =
@@ -180,7 +217,7 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   ds.dynamicStateCount = static_cast<uint32_t>(sizeof(dynamics) / sizeof(dynamics[0]));
   ds.pDynamicStates = dynamics;
 
-  // push constant: mat4 mvp (16 floats = 64 bytes)
+  // ---- Push constant: mat4 mvp (64 bytes) ----
   VkPushConstantRange pcr{};
   pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   pcr.offset = 0;
@@ -202,13 +239,15 @@ void Pipeline::init(Context const& ctx, Swapchain const& sc, std::string const& 
   gpci.pViewportState = &vp;
   gpci.pRasterizationState = &rs;
   gpci.pMultisampleState = &ms;
+  gpci.pDepthStencilState = &ds_depth;
   gpci.pColorBlendState = &cb;
   gpci.pDynamicState = &ds;
   gpci.layout = pipeline_layout_;
   gpci.renderPass = render_pass_;
   gpci.subpass = 0;
 
-  vk_check(vkCreateGraphicsPipelines(ctx.device(), VK_NULL_HANDLE, 1, &gpci, nullptr, &pipeline_), "vkCreateGraphicsPipelines");
+  vk_check(vkCreateGraphicsPipelines(ctx.device(), VK_NULL_HANDLE, 1, &gpci, nullptr, &pipeline_),
+           "vkCreateGraphicsPipelines");
 
   vkDestroyShaderModule(ctx.device(), frag, nullptr);
   vkDestroyShaderModule(ctx.device(), vert, nullptr);
