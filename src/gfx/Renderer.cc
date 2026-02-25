@@ -243,14 +243,16 @@ void Renderer::record_command_buffer(VkCommandBuffer cb,
 
   glm::mat4 const model(1.0f);
   glm::mat4 const mvp = cam.mvp(aspect, model);
-
   vkCmdPushConstants(cb, pl.pipeline_layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, 16u * static_cast<uint32_t>(sizeof(float)), &mvp);
 
   VkBuffer vb = mesh.vertex_buffer();
-  VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(cb, 0, 1, &vb, offsets);
+  VkDeviceSize vb_offsets[] = {0};
+  vkCmdBindVertexBuffers(cb, 0, 1, &vb, vb_offsets);
 
-  vkCmdDraw(cb, mesh.vertex_count(), 1, 0, 0);
+  VkBuffer ib = mesh.index_buffer();
+  vkCmdBindIndexBuffer(cb, ib, 0, mesh.index_type());
+
+  vkCmdDrawIndexed(cb, mesh.index_count(), 1, 0, 0, 0);
 
   vkCmdEndRenderPass(cb);
   vk_check(vkEndCommandBuffer(cb), "vkEndCommandBuffer");
@@ -265,7 +267,6 @@ void Renderer::recreate_swapchain_dependent(Context const& ctx,
 
   sc.recreate(ctx, window);
 
-  // depth depends on extent -> recreate it
   depth.shutdown(ctx);
   depth.init(ctx, sc);
 

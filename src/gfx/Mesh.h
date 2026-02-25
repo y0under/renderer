@@ -43,6 +43,9 @@ struct Vertex {
 
 class Mesh {
 public:
+  using Index = std::uint32_t;
+
+public:
   Mesh() = default;
   ~Mesh();
 
@@ -52,17 +55,23 @@ public:
   Mesh(Mesh&& other) noexcept;
   Mesh& operator=(Mesh&& other) noexcept;
 
-  void init_triangle(Context const& ctx); // minimal demo mesh
+  // quad (2 triangles) to demonstrate index buffer usage
+  void init_quad(Context const& ctx);
   void shutdown(Context const& ctx);
 
   VkBuffer vertex_buffer() const;
+  VkBuffer index_buffer() const;
+
   std::uint32_t vertex_count() const { return vertex_count_; }
+  std::uint32_t index_count() const { return index_count_; }
+  VkIndexType index_type() const { return VK_INDEX_TYPE_UINT32; }
 
 private:
   struct Impl;
   Impl* impl_ = nullptr;
 
   std::uint32_t vertex_count_ = 0;
+  std::uint32_t index_count_ = 0;
 };
 
 } // namespace gfx

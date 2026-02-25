@@ -83,7 +83,7 @@ int main() {
 
     rd.init(ctx, sc, pl, depth);
 
-    mesh.init_triangle(ctx);
+    mesh.init_quad(ctx);
 
     cam.set_perspective(60.0f * 3.1415926535f / 180.0f, 0.1f, 100.0f);
     cam.set_look_at(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
