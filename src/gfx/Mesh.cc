@@ -2,6 +2,7 @@
 
 #include "gfx/Buffer.h"
 #include "gfx/Context.h"
+#include "gfx/Upload.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -58,7 +59,6 @@ void Mesh::init_quad(Context const& ctx) {
     fail("Mesh: allocation failed");
   }
 
-  // A colored quad on z=0 plane (two triangles).
   std::vector<Vertex> v{
     Vertex{{-0.6f, -0.4f, 0.0f}, {1.0f, 0.2f, 0.2f}}, // 0
     Vertex{{ 0.6f, -0.4f, 0.0f}, {0.2f, 1.0f, 0.2f}}, // 1
@@ -74,23 +74,22 @@ void Mesh::init_quad(Context const& ctx) {
   vertex_count_ = static_cast<std::uint32_t>(v.size());
   index_count_ = static_cast<std::uint32_t>(idx.size());
 
-  {
-    VkDeviceSize const bytes = static_cast<VkDeviceSize>(v.size() * sizeof(Vertex));
-    impl_->vb.init(ctx,
-                   bytes,
-                   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    impl_->vb.upload(ctx, v.data(), v.size() * sizeof(Vertex));
-  }
+  Upload uploader{};
+  uploader.init(ctx);
 
-  {
-    VkDeviceSize const bytes = static_cast<VkDeviceSize>(idx.size() * sizeof(Index));
-    impl_->ib.init(ctx,
-                   bytes,
-                   VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    impl_->ib.upload(ctx, idx.data(), idx.size() * sizeof(Index));
-  }
+  impl_->vb.init_device_local_with_staging(ctx,
+                                           uploader,
+                                           v.data(),
+                                           v.size() * sizeof(Vertex),
+                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+  impl_->ib.init_device_local_with_staging(ctx,
+                                           uploader,
+                                           idx.data(),
+                                           idx.size() * sizeof(Index),
+                                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+  uploader.shutdown(ctx);
 }
 
 void Mesh::shutdown(Context const& ctx) {

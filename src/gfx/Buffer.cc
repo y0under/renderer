@@ -1,6 +1,7 @@
 #include "gfx/Buffer.h"
 
 #include "gfx/Context.h"
+#include "gfx/Upload.h"
 
 #include <cstring>
 #include <stdexcept>
@@ -115,6 +116,48 @@ void Buffer::upload(Context const& ctx, void const* data, std::size_t size, std:
            "vkMapMemory");
   std::memcpy(mapped, data, size);
   vkUnmapMemory(ctx.device(), memory_);
+}
+
+void Buffer::init_device_local_with_staging(Context const& ctx,
+                                            Upload& uploader,
+                                            void const* data,
+                                            std::size_t size_bytes,
+                                            VkBufferUsageFlags usage) {
+  if (data == nullptr) {
+    fail("init_device_local_with_staging: data == nullptr");
+  }
+  if (size_bytes == 0U) {
+    fail("init_device_local_with_staging: size == 0");
+  }
+
+  // 1) staging buffer (host-visible)
+  Buffer staging{};
+  staging.init(ctx,
+               static_cast<VkDeviceSize>(size_bytes),
+               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  staging.upload(ctx, data, size_bytes);
+
+  // 2) device-local destination
+  // Must include TRANSFER_DST for vkCmdCopyBuffer.
+  init(ctx,
+       static_cast<VkDeviceSize>(size_bytes),
+       usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+  // 3) copy
+  VkCommandBuffer cb = uploader.begin(ctx);
+
+  VkBufferCopy region{};
+  region.srcOffset = 0;
+  region.dstOffset = 0;
+  region.size = static_cast<VkDeviceSize>(size_bytes);
+  vkCmdCopyBuffer(cb, staging.handle(), handle(), 1, &region);
+
+  uploader.end_and_submit(ctx, cb);
+
+  // 4) staging cleanup
+  staging.shutdown(ctx);
 }
 
 } // namespace gfx

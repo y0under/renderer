@@ -18,6 +18,7 @@ add_executable(app
   src/gfx/Pipeline.cc
   src/gfx/Renderer.cc
   src/gfx/Swapchain.cc
+  src/gfx/Upload.cc
   src/main.cc
   src/math/Camera.cc)
 
