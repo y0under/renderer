@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "assets/ObjLoader.h"
 #include "gfx/Context.h"
 #include "gfx/Depth.h"
 #include "gfx/Mesh.h"
@@ -41,6 +42,14 @@ char const* shader_frag_path() {
 #else
   return "shaders/compiled/mesh.frag.spv";
 #endif
+}
+
+gfx::Vertex make_vertex(float x, float y, float z) {
+  // Minimal: position-based pseudo color (not normalized, but stable).
+  float const r = 0.5f + 0.5f * x;
+  float const g = 0.5f + 0.5f * y;
+  float const b = 0.5f + 0.5f * z;
+  return gfx::Vertex{{x, y, z}, {r, g, b}};
 }
 
 } // namespace
@@ -83,10 +92,27 @@ int main() {
 
     rd.init(ctx, sc, pl, depth);
 
-    mesh.init_quad(ctx);
+    // ---- Load OBJ (v/f only) ----
+    // Place your obj at: assets/model.obj
+    assets::ObjMesh const om = assets::ObjLoader::load("assets/model.obj");
+
+    std::size_t const vcount = om.positions_xyz.size() / 3U;
+    std::vector<gfx::Vertex> vertices;
+    vertices.reserve(vcount);
+
+    for (std::size_t i = 0; i < vcount; ++i) {
+      float const x = om.positions_xyz[i * 3 + 0];
+      float const y = om.positions_xyz[i * 3 + 1];
+      float const z = om.positions_xyz[i * 3 + 2];
+      vertices.push_back(make_vertex(x, y, z));
+    }
+
+    mesh.init_from_data(ctx, ctx.uploader(), vertices, om.indices);
 
     cam.set_perspective(60.0f * 3.1415926535f / 180.0f, 0.1f, 100.0f);
-    cam.set_look_at(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    cam.set_look_at(glm::vec3(0.0f, 0.0f, 3.0f),
+                    glm::vec3(0.0f, 0.0f, 0.0f),
+                    glm::vec3(0.0f, 1.0f, 0.0f));
   } catch (std::exception const& e) {
     std::fprintf(stderr, "Init failed: %s\n", e.what());
     mesh.shutdown(ctx);

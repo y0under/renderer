@@ -8,6 +8,8 @@ struct GLFWwindow;
 
 namespace gfx {
 
+class Upload;
+
 struct ContextCreateInfo {
   bool enable_validation = true;
   bool enable_debug_utils = true;
@@ -38,12 +40,18 @@ public:
   uint32_t graphics_queue_family() const { return graphics_queue_family_; }
   uint32_t present_queue_family() const { return present_queue_family_; }
 
+  Upload& uploader() { return *upload_; }
+  Upload const& uploader() const { return *upload_; }
+
 private:
   void create_instance(GLFWwindow* window, ContextCreateInfo const& info);
   void setup_debug(ContextCreateInfo const& info);
   void create_surface(GLFWwindow* window);
   void pick_physical_device();
   void create_device(ContextCreateInfo const& info);
+
+  void create_uploader();
+  void destroy_uploader();
 
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
@@ -58,6 +66,8 @@ private:
 
   uint32_t graphics_queue_family_ = UINT32_MAX;
   uint32_t present_queue_family_ = UINT32_MAX;
+
+  Upload* upload_ = nullptr; // owned
 };
 
 } // namespace gfx

@@ -10,6 +10,7 @@ find_package(glm CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
 add_executable(app
+  src/assets/ObjLoader.cc
   src/gfx/Buffer.cc
   src/gfx/Context.cc
   src/gfx/Depth.cc

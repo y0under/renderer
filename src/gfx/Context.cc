@@ -1,6 +1,7 @@
 #include "gfx/Context.h"
 
 #include "gfx/GlfwVulkan.h"
+#include "gfx/Upload.h"
 
 #include <cstdio>
 #include <cstring>
@@ -10,6 +11,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <new>
 
 namespace gfx {
 
@@ -17,13 +19,8 @@ namespace {
 
 constexpr char const* kValidationLayer = "VK_LAYER_KHRONOS_validation";
 
-[[noreturn]] void fail(char const* msg) {
-  throw std::runtime_error(msg);
-}
-
-[[noreturn]] void fail(std::string const& msg) {
-  throw std::runtime_error(msg);
-}
+[[noreturn]] void fail(char const* msg) { throw std::runtime_error(msg); }
+[[noreturn]] void fail(std::string const& msg) { throw std::runtime_error(msg); }
 
 void vk_check(VkResult r, char const* what) {
   if (r == VK_SUCCESS) {
@@ -182,6 +179,7 @@ Context& Context::operator=(Context&& other) noexcept {
   present_queue_ = other.present_queue_;
   graphics_queue_family_ = other.graphics_queue_family_;
   present_queue_family_ = other.present_queue_family_;
+  upload_ = other.upload_;
 
   other.instance_ = VK_NULL_HANDLE;
   other.debug_messenger_ = VK_NULL_HANDLE;
@@ -192,6 +190,7 @@ Context& Context::operator=(Context&& other) noexcept {
   other.present_queue_ = VK_NULL_HANDLE;
   other.graphics_queue_family_ = UINT32_MAX;
   other.present_queue_family_ = UINT32_MAX;
+  other.upload_ = nullptr;
 
   return *this;
 }
@@ -206,9 +205,15 @@ void Context::init(GLFWwindow* window, ContextCreateInfo const& info) {
   create_surface(window);
   pick_physical_device();
   create_device(info);
+
+  // must be after device creation
+  create_uploader();
 }
 
 void Context::shutdown() {
+  // uploader uses device/queue -> destroy before vkDestroyDevice
+  destroy_uploader();
+
   if (device_ != VK_NULL_HANDLE) {
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
@@ -236,6 +241,27 @@ void Context::shutdown() {
   }
 }
 
+void Context::create_uploader() {
+  if (upload_ != nullptr) {
+    fail("Context::create_uploader called twice");
+  }
+  upload_ = new (std::nothrow) Upload();
+  if (upload_ == nullptr) {
+    fail("Context: Upload allocation failed");
+  }
+  upload_->init(*this);
+}
+
+void Context::destroy_uploader() {
+  if (upload_ != nullptr) {
+    if (device_ != VK_NULL_HANDLE) {
+      upload_->shutdown(*this);
+    }
+    delete upload_;
+    upload_ = nullptr;
+  }
+}
+
 void Context::create_instance(GLFWwindow* window, ContextCreateInfo const& info) {
   (void)window;
 
@@ -251,8 +277,9 @@ void Context::create_instance(GLFWwindow* window, ContextCreateInfo const& info)
 
   std::vector<char const*> instance_exts(glfw_exts, glfw_exts + glfw_ext_count);
 
-  if (!has_extension(instance_exts, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
-    instance_exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+  // portability enumeration (MoltenVK/macOS)
+  if (!has_extension(instance_exts, "VK_KHR_portability_enumeration")) {
+    instance_exts.push_back("VK_KHR_portability_enumeration");
   }
 
   if (info.enable_validation && info.enable_debug_utils && !has_extension(instance_exts, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
@@ -266,9 +293,9 @@ void Context::create_instance(GLFWwindow* window, ContextCreateInfo const& info)
 
   VkApplicationInfo app{};
   app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  app.pApplicationName = "GameEngine";
+  app.pApplicationName = "Renderer";
   app.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
-  app.pEngineName = "GameEngine";
+  app.pEngineName = "Renderer";
   app.engineVersion = VK_MAKE_VERSION(0, 1, 0);
   app.apiVersion = VK_API_VERSION_1_1;
 
@@ -341,8 +368,8 @@ void Context::create_device(ContextCreateInfo const& info) {
     constexpr char const* kPortabilitySubsetExt = "VK_KHR_portability_subset";
     if (has_device_extension(physical_device_, kPortabilitySubsetExt)) {
       device_exts.push_back(kPortabilitySubsetExt);
+    }
   }
-}
 
   float const prio = 1.0f;
 

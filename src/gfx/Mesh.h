@@ -10,6 +10,7 @@ namespace gfx {
 
 class Context;
 class Buffer;
+class Upload;
 
 struct Vertex {
   float pos[3];
@@ -55,8 +56,12 @@ public:
   Mesh(Mesh&& other) noexcept;
   Mesh& operator=(Mesh&& other) noexcept;
 
-  // quad (2 triangles) to demonstrate index buffer usage
-  void init_quad(Context const& ctx);
+  void init_from_data(Context const& ctx,
+                      Upload& uploader,
+                      std::vector<Vertex> const& vertices,
+                      std::vector<Index> const& indices);
+
+  void init_quad(Context const& ctx, Upload& uploader);
   void shutdown(Context const& ctx);
 
   VkBuffer vertex_buffer() const;

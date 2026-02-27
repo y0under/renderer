@@ -49,9 +49,15 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept {
   return *this;
 }
 
-void Mesh::init_quad(Context const& ctx) {
+void Mesh::init_from_data(Context const& ctx,
+                          Upload& uploader,
+                          std::vector<Vertex> const& vertices,
+                          std::vector<Index> const& indices) {
   if (impl_ != nullptr) {
-    fail("Mesh::init_quad called twice");
+    fail("Mesh::init_from_data called twice");
+  }
+  if (vertices.empty() || indices.empty()) {
+    fail("Mesh::init_from_data: empty vertices/indices");
   }
 
   impl_ = new (std::nothrow) Impl();
@@ -59,6 +65,23 @@ void Mesh::init_quad(Context const& ctx) {
     fail("Mesh: allocation failed");
   }
 
+  vertex_count_ = static_cast<std::uint32_t>(vertices.size());
+  index_count_ = static_cast<std::uint32_t>(indices.size());
+
+  impl_->vb.init_device_local_with_staging(ctx,
+                                           uploader,
+                                           vertices.data(),
+                                           vertices.size() * sizeof(Vertex),
+                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+  impl_->ib.init_device_local_with_staging(ctx,
+                                           uploader,
+                                           indices.data(),
+                                           indices.size() * sizeof(Index),
+                                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+}
+
+void Mesh::init_quad(Context const& ctx, Upload& uploader) {
   std::vector<Vertex> v{
     Vertex{{-0.6f, -0.4f, 0.0f}, {1.0f, 0.2f, 0.2f}}, // 0
     Vertex{{ 0.6f, -0.4f, 0.0f}, {0.2f, 1.0f, 0.2f}}, // 1
@@ -71,25 +94,7 @@ void Mesh::init_quad(Context const& ctx) {
     2u, 3u, 0u,
   };
 
-  vertex_count_ = static_cast<std::uint32_t>(v.size());
-  index_count_ = static_cast<std::uint32_t>(idx.size());
-
-  Upload uploader{};
-  uploader.init(ctx);
-
-  impl_->vb.init_device_local_with_staging(ctx,
-                                           uploader,
-                                           v.data(),
-                                           v.size() * sizeof(Vertex),
-                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-
-  impl_->ib.init_device_local_with_staging(ctx,
-                                           uploader,
-                                           idx.data(),
-                                           idx.size() * sizeof(Index),
-                                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-
-  uploader.shutdown(ctx);
+  init_from_data(ctx, uploader, v, idx);
 }
 
 void Mesh::shutdown(Context const& ctx) {
