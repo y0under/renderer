@@ -14,7 +14,8 @@ class Upload;
 
 struct Vertex {
   float pos[3];
-  float color[3];
+  float normal[3];
+  float uv[2];
 
   static VkVertexInputBindingDescription binding_description() {
     VkVertexInputBindingDescription b{};
@@ -24,7 +25,7 @@ struct Vertex {
     return b;
   }
 
-  static void attribute_descriptions(VkVertexInputAttributeDescription out[2]) {
+  static void attribute_descriptions(VkVertexInputAttributeDescription out[3]) {
     VkVertexInputAttributeDescription a0{};
     a0.location = 0;
     a0.binding = 0;
@@ -35,10 +36,17 @@ struct Vertex {
     a1.location = 1;
     a1.binding = 0;
     a1.format = VK_FORMAT_R32G32B32_SFLOAT;
-    a1.offset = static_cast<uint32_t>(offsetof(Vertex, color));
+    a1.offset = static_cast<uint32_t>(offsetof(Vertex, normal));
+
+    VkVertexInputAttributeDescription a2{};
+    a2.location = 2;
+    a2.binding = 0;
+    a2.format = VK_FORMAT_R32G32_SFLOAT;
+    a2.offset = static_cast<uint32_t>(offsetof(Vertex, uv));
 
     out[0] = a0;
     out[1] = a1;
+    out[2] = a2;
   }
 };
 

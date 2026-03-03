@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 #include "assets/ObjLoader.h"
 #include "gfx/Context.h"
@@ -44,14 +45,6 @@ char const* shader_frag_path() {
 #endif
 }
 
-gfx::Vertex make_vertex(float x, float y, float z) {
-  // Minimal: position-based pseudo color (not normalized, but stable).
-  float const r = 0.5f + 0.5f * x;
-  float const g = 0.5f + 0.5f * y;
-  float const b = 0.5f + 0.5f * z;
-  return gfx::Vertex{{x, y, z}, {r, g, b}};
-}
-
 } // namespace
 
 int main() {
@@ -85,34 +78,37 @@ int main() {
     ctx.init(window, ci);
 
     sc.init(ctx, window);
-
     depth.init(ctx, sc);
 
     pl.init(ctx, sc, depth.format(), shader_vert_path(), shader_frag_path());
-
     rd.init(ctx, sc, pl, depth);
 
-    // ---- Load OBJ (v/f only) ----
-    // Place your obj at: assets/model.obj
-    assets::ObjMesh const om = assets::ObjLoader::load("assets/model.obj");
+    // ---- Load OBJ (v/vt/vn dedup) ----
+    // Put your model at: assets/model.obj
+    assets::ObjIndexedMesh const om = assets::ObjLoader::load("assets/model.obj");
 
-    std::size_t const vcount = om.positions_xyz.size() / 3U;
-    std::vector<gfx::Vertex> vertices;
-    vertices.reserve(vcount);
-
-    for (std::size_t i = 0; i < vcount; ++i) {
-      float const x = om.positions_xyz[i * 3 + 0];
-      float const y = om.positions_xyz[i * 3 + 1];
-      float const z = om.positions_xyz[i * 3 + 2];
-      vertices.push_back(make_vertex(x, y, z));
+    std::vector<gfx::Vertex> verts;
+    verts.reserve(om.vertices.size());
+    for (auto const& v : om.vertices) {
+      gfx::Vertex gv{};
+      gv.pos[0] = v.pos[0];
+      gv.pos[1] = v.pos[1];
+      gv.pos[2] = v.pos[2];
+      gv.normal[0] = v.normal[0];
+      gv.normal[1] = v.normal[1];
+      gv.normal[2] = v.normal[2];
+      gv.uv[0] = v.uv[0];
+      gv.uv[1] = v.uv[1];
+      verts.push_back(gv);
     }
 
-    mesh.init_from_data(ctx, ctx.uploader(), vertices, om.indices);
+    mesh.init_from_data(ctx, ctx.uploader(), verts, om.indices);
 
     cam.set_perspective(60.0f * 3.1415926535f / 180.0f, 0.1f, 100.0f);
-    cam.set_look_at(glm::vec3(0.0f, 0.0f, 3.0f),
-                    glm::vec3(0.0f, 0.0f, 0.0f),
-                    glm::vec3(0.0f, 1.0f, 0.0f));
+    cam.set_look_at(
+        glm::vec3(1.8f, 1.2f, 2.8f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f));
   } catch (std::exception const& e) {
     std::fprintf(stderr, "Init failed: %s\n", e.what());
     mesh.shutdown(ctx);

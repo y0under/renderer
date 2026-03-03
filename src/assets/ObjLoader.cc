@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -28,111 +29,165 @@ bool starts_with(std::string const& s, char const* prefix) {
   return true;
 }
 
-} // namespace
-
-std::int32_t ObjLoader::parse_vertex_index_token(std::string const& token) {
-  // token formats: "v", "v/vt", "v//vn", "v/vt/vn"
-  // We only need the leading signed integer v.
-  std::size_t const slash = token.find('/');
-  std::string const head = (slash == std::string::npos) ? token : token.substr(0, slash);
-
-  if (head.empty()) {
-    fail("OBJ: face token has empty vertex index");
+std::string ltrim(std::string const& line) {
+  std::size_t i = 0;
+  while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i])) != 0) {
+    ++i;
   }
-
-  std::size_t pos = 0;
-  bool neg = false;
-  if (head[pos] == '-') {
-    neg = true;
-    ++pos;
-  }
-
-  if (pos >= head.size()) {
-    fail("OBJ: invalid vertex index token: " + token);
-  }
-  if (!std::isdigit(static_cast<unsigned char>(head[pos]))) {
-    fail("OBJ: invalid vertex index token: " + token);
-  }
-
-  std::int32_t value = 0;
-  for (; pos < head.size(); ++pos) {
-    char const c = head[pos];
-    if (!std::isdigit(static_cast<unsigned char>(c))) {
-      fail("OBJ: invalid vertex index token: " + token);
-    }
-    value = static_cast<std::int32_t>(value * 10 + (c - '0'));
-  }
-
-  return neg ? -value : value;
+  return (i < line.size()) ? line.substr(i) : std::string{};
 }
 
-std::int32_t ObjLoader::to_zero_based_index(std::int32_t obj_index, std::size_t vertex_count) {
-  // OBJ: 1-based positive, negative means relative to end: -1 is last.
+struct Key {
+  std::int32_t v;
+  std::int32_t vt;
+  std::int32_t vn;
+
+  bool operator==(Key const& o) const {
+    return v == o.v && vt == o.vt && vn == o.vn;
+  }
+};
+
+struct KeyHash {
+  std::size_t operator()(Key const& k) const noexcept {
+    // cheap mix
+    std::size_t h = static_cast<std::size_t>(k.v) * 1315423911u;
+    h ^= static_cast<std::size_t>(k.vt) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    h ^= static_cast<std::size_t>(k.vn) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    return h;
+  }
+};
+
+} // namespace
+
+ObjLoader::Ref ObjLoader::parse_face_ref(std::string const& token) {
+  // token: v, v/vt, v//vn, v/vt/vn
+  Ref r{};
+
+  std::size_t const s1 = token.find('/');
+  if (s1 == std::string::npos) {
+    // "v"
+    r.v = std::stoi(token);
+    return r;
+  }
+
+  std::string const a = token.substr(0, s1);
+  r.v = a.empty() ? 0 : std::stoi(a);
+
+  std::size_t const s2 = token.find('/', s1 + 1);
+  if (s2 == std::string::npos) {
+    // "v/vt"
+    std::string const b = token.substr(s1 + 1);
+    r.vt = b.empty() ? 0 : std::stoi(b);
+    return r;
+  }
+
+  // "v/..../vn" (maybe empty middle)
+  std::string const b = token.substr(s1 + 1, s2 - (s1 + 1));
+  std::string const c = token.substr(s2 + 1);
+
+  r.vt = b.empty() ? 0 : std::stoi(b);
+  r.vn = c.empty() ? 0 : std::stoi(c);
+  return r;
+}
+
+std::int32_t ObjLoader::to_zero_based(std::int32_t obj_index, std::size_t count, char const* what) {
+  // OBJ: 1-based positive, negative means relative to end, 0 is invalid/missing (caller handles missing)
   if (obj_index > 0) {
     std::int32_t const z = obj_index - 1;
-    if (z < 0 || static_cast<std::size_t>(z) >= vertex_count) {
-      fail("OBJ: vertex index out of range");
+    if (z < 0 || static_cast<std::size_t>(z) >= count) {
+      fail(std::string("OBJ: ") + what + " index out of range");
     }
     return z;
   }
 
   if (obj_index < 0) {
-    std::int64_t const z = static_cast<std::int64_t>(vertex_count) + static_cast<std::int64_t>(obj_index);
-    if (z < 0 || z >= static_cast<std::int64_t>(vertex_count)) {
-      fail("OBJ: negative vertex index out of range");
+    std::int64_t const z = static_cast<std::int64_t>(count) + static_cast<std::int64_t>(obj_index);
+    if (z < 0 || z >= static_cast<std::int64_t>(count)) {
+      fail(std::string("OBJ: ") + what + " negative index out of range");
     }
     return static_cast<std::int32_t>(z);
   }
 
-  fail("OBJ: vertex index 0 is invalid");
+  fail(std::string("OBJ: ") + what + " index 0 is invalid");
 }
 
-ObjMesh ObjLoader::load(std::string const& path) {
+ObjIndexedMesh ObjLoader::load(std::string const& path) {
   std::ifstream ifs(path);
   if (!ifs) {
     fail("OBJ: failed to open: " + path);
   }
 
-  ObjMesh out{};
-  std::string line;
+  std::vector<float> positions;  // x,y,z...
+  std::vector<float> texcoords;  // u,v...
+  std::vector<float> normals;    // x,y,z...
 
+  ObjIndexedMesh out{};
+
+  std::unordered_map<Key, std::uint32_t, KeyHash> dedup;
+  dedup.reserve(4096);
+
+  std::string line;
   std::size_t line_no = 0;
+
   while (std::getline(ifs, line)) {
     ++line_no;
 
-    if (line.empty()) {
+    std::string const s = ltrim(line);
+    if (s.empty() || s[0] == '#') {
       continue;
     }
 
-    // Skip comments
-    if (!line.empty() && line[0] == '#') {
-      continue;
-    }
-
-    // Trim leading spaces
-    std::size_t first = 0;
-    while (first < line.size() && std::isspace(static_cast<unsigned char>(line[first])) != 0) {
-      ++first;
-    }
-    if (first >= line.size()) {
-      continue;
-    }
-
-    std::string const s = line.substr(first);
     if (starts_with(s, "v ")) {
       std::istringstream iss(s);
-      char vtag = '\0';
+      char tag = '\0';
       float x = 0.0f;
       float y = 0.0f;
       float z = 0.0f;
 
-      iss >> vtag >> x >> y >> z;
+      iss >> tag >> x >> y >> z;
       if (!iss) {
-        fail("OBJ: malformed vertex at line " + std::to_string(line_no));
+        fail("OBJ: malformed v at line " + std::to_string(line_no));
       }
-      out.positions_xyz.push_back(x);
-      out.positions_xyz.push_back(y);
-      out.positions_xyz.push_back(z);
+
+      positions.push_back(x);
+      positions.push_back(y);
+      positions.push_back(z);
+      continue;
+    }
+
+    if (starts_with(s, "vt ")) {
+      std::istringstream iss(s);
+      char t0 = '\0';
+      char t1 = '\0';
+      float u = 0.0f;
+      float v = 0.0f;
+
+      iss >> t0 >> t1 >> u >> v; // reads "v" "t" u v
+      if (!iss) {
+        fail("OBJ: malformed vt at line " + std::to_string(line_no));
+      }
+
+      texcoords.push_back(u);
+      texcoords.push_back(v);
+      continue;
+    }
+
+    if (starts_with(s, "vn ")) {
+      std::istringstream iss(s);
+      char t0 = '\0';
+      char t1 = '\0';
+      float x = 0.0f;
+      float y = 0.0f;
+      float z = 0.0f;
+
+      iss >> t0 >> t1 >> x >> y >> z; // reads "v" "n" x y z
+      if (!iss) {
+        fail("OBJ: malformed vn at line " + std::to_string(line_no));
+      }
+
+      normals.push_back(x);
+      normals.push_back(y);
+      normals.push_back(z);
       continue;
     }
 
@@ -141,42 +196,87 @@ ObjMesh ObjLoader::load(std::string const& path) {
       char ftag = '\0';
       iss >> ftag;
 
-      std::vector<std::int32_t> face;
+      std::vector<Ref> face;
       std::string tok;
       while (iss >> tok) {
-        std::int32_t const vi = parse_vertex_index_token(tok);
-        face.push_back(vi);
+        face.push_back(parse_face_ref(tok));
       }
 
       if (face.size() < 3U) {
         fail("OBJ: face has <3 vertices at line " + std::to_string(line_no));
       }
 
-      std::size_t const vcount = out.positions_xyz.size() / 3U;
+      std::size_t const pos_count = positions.size() / 3U;
+      std::size_t const uv_count = texcoords.size() / 2U;
+      std::size_t const n_count = normals.size() / 3U;
+
+      auto get_or_add = [&](Ref const& r) -> std::uint32_t {
+        if (r.v == 0) {
+          fail("OBJ: face vertex missing position index at line " + std::to_string(line_no));
+        }
+
+        std::int32_t const zv = to_zero_based(r.v, pos_count, "v");
+        std::int32_t const zt = (r.vt != 0) ? to_zero_based(r.vt, uv_count, "vt") : -1;
+        std::int32_t const zn = (r.vn != 0) ? to_zero_based(r.vn, n_count, "vn") : -1;
+
+        Key const key{zv, zt, zn};
+        auto it = dedup.find(key);
+        if (it != dedup.end()) {
+          return it->second;
+        }
+
+        VertexPNUV vtx{};
+
+        vtx.pos[0] = positions[static_cast<std::size_t>(zv) * 3 + 0];
+        vtx.pos[1] = positions[static_cast<std::size_t>(zv) * 3 + 1];
+        vtx.pos[2] = positions[static_cast<std::size_t>(zv) * 3 + 2];
+
+        if (zt >= 0) {
+          vtx.uv[0] = texcoords[static_cast<std::size_t>(zt) * 2 + 0];
+          vtx.uv[1] = texcoords[static_cast<std::size_t>(zt) * 2 + 1];
+        } else {
+          vtx.uv[0] = 0.0f;
+          vtx.uv[1] = 0.0f;
+        }
+
+        if (zn >= 0) {
+          vtx.normal[0] = normals[static_cast<std::size_t>(zn) * 3 + 0];
+          vtx.normal[1] = normals[static_cast<std::size_t>(zn) * 3 + 1];
+          vtx.normal[2] = normals[static_cast<std::size_t>(zn) * 3 + 2];
+        } else {
+          // fallback (no normals in file)
+          vtx.normal[0] = 0.0f;
+          vtx.normal[1] = 0.0f;
+          vtx.normal[2] = 1.0f;
+        }
+
+        std::uint32_t const new_index = static_cast<std::uint32_t>(out.vertices.size());
+        out.vertices.push_back(vtx);
+        dedup.emplace(key, new_index);
+        return new_index;
+      };
 
       // triangulate fan: (0, i, i+1)
-      std::int32_t const i0 = to_zero_based_index(face[0], vcount);
-
+      std::uint32_t const i0 = get_or_add(face[0]);
       for (std::size_t i = 1; i + 1 < face.size(); ++i) {
-        std::int32_t const i1 = to_zero_based_index(face[i], vcount);
-        std::int32_t const i2 = to_zero_based_index(face[i + 1], vcount);
-
-        out.indices.push_back(static_cast<std::uint32_t>(i0));
-        out.indices.push_back(static_cast<std::uint32_t>(i1));
-        out.indices.push_back(static_cast<std::uint32_t>(i2));
+        std::uint32_t const i1 = get_or_add(face[i]);
+        std::uint32_t const i2 = get_or_add(face[i + 1]);
+        out.indices.push_back(i0);
+        out.indices.push_back(i1);
+        out.indices.push_back(i2);
       }
 
       continue;
     }
 
-    // Ignore other lines (vt, vn, usemtl, mtllib, o, g, s, etc.)
+    // Ignore: o, g, s, usemtl, mtllib, etc.
   }
 
-  if (out.positions_xyz.empty()) {
-    fail("OBJ: no vertices loaded: " + path);
+  if (out.vertices.empty()) {
+    fail("OBJ: no vertices generated: " + path);
   }
   if (out.indices.empty()) {
-    fail("OBJ: no faces loaded (indices empty): " + path);
+    fail("OBJ: no faces/indices generated: " + path);
   }
 
   return out;

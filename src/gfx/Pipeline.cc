@@ -152,16 +152,16 @@ void Pipeline::init(Context const& ctx,
   stages[1].module = frag;
   stages[1].pName = "main";
 
-  // ---- Vertex input ----
+  // ---- Vertex input (pos, normal, uv) ----
   VkVertexInputBindingDescription binding = Vertex::binding_description();
-  VkVertexInputAttributeDescription attrs[2]{};
+  VkVertexInputAttributeDescription attrs[3]{};
   Vertex::attribute_descriptions(attrs);
 
   VkPipelineVertexInputStateCreateInfo vi{};
   vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vi.vertexBindingDescriptionCount = 1;
   vi.pVertexBindingDescriptions = &binding;
-  vi.vertexAttributeDescriptionCount = 2;
+  vi.vertexAttributeDescriptionCount = 3;
   vi.pVertexAttributeDescriptions = attrs;
 
   VkPipelineInputAssemblyStateCreateInfo ia{};
@@ -169,7 +169,6 @@ void Pipeline::init(Context const& ctx,
   ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   ia.primitiveRestartEnable = VK_FALSE;
 
-  // ---- Dynamic viewport/scissor ----
   VkPipelineViewportStateCreateInfo vp{};
   vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   vp.viewportCount = 1;
@@ -217,11 +216,10 @@ void Pipeline::init(Context const& ctx,
   ds.dynamicStateCount = static_cast<uint32_t>(sizeof(dynamics) / sizeof(dynamics[0]));
   ds.pDynamicStates = dynamics;
 
-  // ---- Push constant: mat4 mvp (64 bytes) ----
   VkPushConstantRange pcr{};
   pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   pcr.offset = 0;
-  pcr.size = 16u * static_cast<uint32_t>(sizeof(float));
+  pcr.size = 16u * static_cast<uint32_t>(sizeof(float)); // mat4
 
   VkPipelineLayoutCreateInfo plci{};
   plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

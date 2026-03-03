@@ -82,11 +82,12 @@ void Mesh::init_from_data(Context const& ctx,
 }
 
 void Mesh::init_quad(Context const& ctx, Upload& uploader) {
+  // Flat quad on z=0 with +Z normal, simple UVs.
   std::vector<Vertex> v{
-    Vertex{{-0.6f, -0.4f, 0.0f}, {1.0f, 0.2f, 0.2f}}, // 0
-    Vertex{{ 0.6f, -0.4f, 0.0f}, {0.2f, 1.0f, 0.2f}}, // 1
-    Vertex{{ 0.6f,  0.4f, 0.0f}, {0.2f, 0.2f, 1.0f}}, // 2
-    Vertex{{-0.6f,  0.4f, 0.0f}, {1.0f, 1.0f, 0.2f}}, // 3
+    Vertex{{-0.6f, -0.4f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}}, // 0
+    Vertex{{ 0.6f, -0.4f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}, // 1
+    Vertex{{ 0.6f,  0.4f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // 2
+    Vertex{{-0.6f,  0.4f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // 3
   };
 
   std::vector<Index> idx{
