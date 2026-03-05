@@ -14,6 +14,7 @@
 #include "math/Camera.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace {
 
@@ -43,6 +44,38 @@ char const* shader_frag_path() {
 #else
   return "shaders/compiled/mesh.frag.spv";
 #endif
+}
+
+void update_angles(GLFWwindow* window, float dt, float& yaw, float& pitch) {
+  float const speed = 1.5f; // rad/s
+
+  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+    yaw += speed * dt;
+  }
+  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+    yaw -= speed * dt;
+  }
+  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+    pitch += speed * dt;
+  }
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+    pitch -= speed * dt;
+  }
+
+  float const limit = 1.4f;
+  if (pitch > limit) {
+    pitch = limit;
+  }
+  if (pitch < -limit) {
+    pitch = -limit;
+  }
+}
+
+glm::mat4 make_model_matrix(float yaw, float pitch) {
+  glm::mat4 model(1.0f);
+  model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+  model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
+  return model;
 }
 
 } // namespace
@@ -83,8 +116,6 @@ int main() {
     pl.init(ctx, sc, depth.format(), shader_vert_path(), shader_frag_path());
     rd.init(ctx, sc, pl, depth);
 
-    // ---- Load OBJ (v/vt/vn dedup) ----
-    // Put your model at: assets/model.obj
     assets::ObjIndexedMesh const om = assets::ObjLoader::load("assets/model.obj");
 
     std::vector<gfx::Vertex> verts;
@@ -105,10 +136,9 @@ int main() {
     mesh.init_from_data(ctx, ctx.uploader(), verts, om.indices);
 
     cam.set_perspective(60.0f * 3.1415926535f / 180.0f, 0.1f, 100.0f);
-    cam.set_look_at(
-        glm::vec3(1.8f, 1.2f, 2.8f),
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f));
+    cam.set_look_at(glm::vec3(1.8f, 1.2f, 2.8f),
+                    glm::vec3(0.0f, 0.0f, 0.0f),
+                    glm::vec3(0.0f, 1.0f, 0.0f));
   } catch (std::exception const& e) {
     std::fprintf(stderr, "Init failed: %s\n", e.what());
     mesh.shutdown(ctx);
@@ -122,9 +152,21 @@ int main() {
     return EXIT_FAILURE;
   }
 
+  float yaw = 0.0f;
+  float pitch = 0.0f;
+  float prev_time = static_cast<float>(glfwGetTime());
+
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     glfwPollEvents();
-    (void)rd.draw_frame(ctx, window, sc, pl, mesh, cam, depth);
+
+    float const now = static_cast<float>(glfwGetTime());
+    float const dt = now - prev_time;
+    prev_time = now;
+
+    update_angles(window, dt, yaw, pitch);
+    glm::mat4 const model = make_model_matrix(yaw, pitch);
+
+    (void)rd.draw_frame(ctx, window, sc, pl, mesh, cam, model, depth);
   }
 
   mesh.shutdown(ctx);

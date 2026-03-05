@@ -197,7 +197,8 @@ void Renderer::record_command_buffer(VkCommandBuffer cb,
                                      Pipeline const& pl,
                                      VkFramebuffer fb,
                                      Mesh const& mesh,
-                                     math::Camera const& cam) {
+                                     math::Camera const& cam,
+                                     glm::mat4 const& model) {
   VkCommandBufferBeginInfo bi{};
   bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   vk_check(vkBeginCommandBuffer(cb, &bi), "vkBeginCommandBuffer");
@@ -241,7 +242,6 @@ void Renderer::record_command_buffer(VkCommandBuffer cb,
       ? (static_cast<float>(sc.extent().width) / static_cast<float>(sc.extent().height))
       : 1.0f;
 
-  glm::mat4 const model(1.0f);
   glm::mat4 const mvp = cam.mvp(aspect, model);
   vkCmdPushConstants(cb, pl.pipeline_layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, 16u * static_cast<uint32_t>(sizeof(float)), &mvp);
 
@@ -287,6 +287,7 @@ bool Renderer::draw_frame(Context const& ctx,
                           Pipeline const& pl,
                           Mesh const& mesh,
                           math::Camera const& cam,
+                          glm::mat4 const& model,
                           Depth& depth) {
   if (window == nullptr) {
     fail("Renderer::draw_frame: window == nullptr");
@@ -317,7 +318,7 @@ bool Renderer::draw_frame(Context const& ctx,
 
   VkCommandBuffer cb = command_buffers_.at(static_cast<std::size_t>(image_index));
   vk_check(vkResetCommandBuffer(cb, 0), "vkResetCommandBuffer");
-  record_command_buffer(cb, sc, pl, framebuffers_.at(static_cast<std::size_t>(image_index)), mesh, cam);
+  record_command_buffer(cb, sc, pl, framebuffers_.at(static_cast<std::size_t>(image_index)), mesh, cam, model);
 
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 

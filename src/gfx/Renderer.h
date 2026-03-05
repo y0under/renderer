@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <glm/glm.hpp>
+
 struct GLFWwindow;
 
 namespace math { class Camera; }
@@ -37,6 +39,7 @@ public:
                   Pipeline const& pl,
                   Mesh const& mesh,
                   math::Camera const& cam,
+                  glm::mat4 const& model,
                   Depth& depth);
 
 private:
@@ -56,7 +59,8 @@ private:
                             Pipeline const& pl,
                             VkFramebuffer fb,
                             Mesh const& mesh,
-                            math::Camera const& cam);
+                            math::Camera const& cam,
+                            glm::mat4 const& model);
 
   void recreate_swapchain_dependent(Context const& ctx,
                                     GLFWwindow* window,
