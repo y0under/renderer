@@ -71,10 +71,37 @@ void update_angles(GLFWwindow* window, float dt, float& yaw, float& pitch) {
   }
 }
 
-glm::mat4 make_model_matrix(float yaw, float pitch) {
+float update_scale(GLFWwindow* window, float dt, float scale) {
+  float const speed = 1.5f; // units per second (multiplicative-ish)
+  float const factor = 1.0f + speed * dt;
+
+  if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+    scale *= factor;
+  }
+  if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+    scale /= factor;
+  }
+
+  float const min_s = 0.01f;
+  float const max_s = 1000.0f;
+
+  if (scale < min_s) {
+    scale = min_s;
+  }
+  if (scale > max_s) {
+    scale = max_s;
+  }
+
+  return scale;
+}
+
+glm::mat4 make_model_matrix(float yaw, float pitch, float scale) {
   glm::mat4 model(1.0f);
+
+  model = glm::scale(model, glm::vec3(scale, scale, scale));
   model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
   model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
+
   return model;
 }
 
@@ -156,6 +183,7 @@ int main() {
   float pitch = 0.0f;
   float prev_time = static_cast<float>(glfwGetTime());
 
+  float scale = 1.0f;
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     glfwPollEvents();
 
@@ -164,8 +192,9 @@ int main() {
     prev_time = now;
 
     update_angles(window, dt, yaw, pitch);
-    glm::mat4 const model = make_model_matrix(yaw, pitch);
+    scale = update_scale(window, dt, scale);
 
+    glm::mat4 const model = make_model_matrix(yaw, pitch, scale);
     (void)rd.draw_frame(ctx, window, sc, pl, mesh, cam, model, depth);
   }
 
